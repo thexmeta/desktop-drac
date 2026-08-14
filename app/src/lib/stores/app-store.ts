@@ -455,6 +455,8 @@ const RecentRepositoriesKey = 'recently-selected-repositories'
  */
 const RecentRepositoriesLength = 7
 
+const PinnedRepositoriesKey = 'pinned-repositories'
+
 const defaultSidebarWidth: number = 250
 const sidebarWidthConfigKey: string = 'sidebar-width'
 
@@ -585,6 +587,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
   private accounts: ReadonlyArray<Account> = new Array<Account>()
   private repositories: ReadonlyArray<Repository> = new Array<Repository>()
   private recentRepositories: ReadonlyArray<number> = new Array<number>()
+  private pinnedRepositories: ReadonlyArray<number> = new Array<number>()
 
   private selectedRepository: Repository | CloningRepository | null = null
 
@@ -770,6 +773,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
     super()
 
     this.showWelcomeFlow = !hasShownWelcomeFlow()
+    this.pinnedRepositories = getNumberArray(PinnedRepositoriesKey)
 
     if (__WIN32__) {
       const useWindowsOpenSSH = getBoolean(UseWindowsOpenSSHKey)
@@ -1269,6 +1273,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       accounts: this.accounts,
       repositories,
       recentRepositories: this.recentRepositories,
+      pinnedRepositories: this.pinnedRepositories,
       localRepositoryStateLookup: this.localRepositoryStateLookup,
       windowState: this.windowState,
       windowZoomFactor: this.windowZoomFactor,
@@ -5005,6 +5010,24 @@ export class AppStore extends TypedBaseStore<IAppState> {
     newAlias: string | null
   ): Promise<void> {
     return this.repositoriesStore.updateRepositoryAlias(repository, newAlias)
+  }
+
+  /** This shouldn't be called directly. See `Dispatcher`. */
+  public async _setRepositoryPinned(
+    repository: Repository,
+    pinned: boolean
+  ): Promise<void> {
+    if (pinned) {
+      if (!this.pinnedRepositories.includes(repository.id)) {
+        this.pinnedRepositories = [repository.id, ...this.pinnedRepositories]
+      }
+    } else {
+      this.pinnedRepositories = this.pinnedRepositories.filter(
+        id => id !== repository.id
+      )
+    }
+    setNumberArray(PinnedRepositoriesKey, this.pinnedRepositories)
+    this.emitUpdate()
   }
 
   /** This shouldn't be called directly. See `Dispatcher`. */
