@@ -4,6 +4,7 @@ import {
   supportsSystemThemeChanges,
   getCurrentlyAppliedTheme,
 } from '../lib/application-theme'
+import { TitleBarStyle } from '../lib/title-bar-style'
 import { Row } from '../lib/row'
 import { DialogContent } from '../dialog'
 import { RadioGroup } from '../lib/radio-group'
@@ -28,6 +29,8 @@ interface IAppearanceProps {
   readonly onSelectedThemeChanged: (theme: ApplicationTheme) => void
   readonly selectedTabSize: number
   readonly onSelectedTabSizeChanged: (tabSize: number) => void
+  readonly titleBarStyle: TitleBarStyle
+  readonly onTitleBarStyleChanged: (titleBarStyle: TitleBarStyle) => void
   readonly selectedDateFormat: DateFormat
   readonly onSelectedDateFormatChanged: (format: DateFormat) => void
   readonly selectedTimeFormat: TimeFormat
@@ -41,6 +44,16 @@ interface IAppearanceProps {
 interface IAppearanceState {
   readonly selectedTheme: ApplicationTheme | null
   readonly selectedTabSize: number
+  readonly titleBarStyle: TitleBarStyle
+}
+
+function getTitleBarStyleDescription(titleBarStyle: TitleBarStyle): string {
+  switch (titleBarStyle) {
+    case 'custom':
+      return 'Uses the menu system provided by GitHub Desktop, hiding the default chrome provided by your window manager.'
+    case 'native':
+      return 'Uses the menu system and chrome provided by your window manager.'
+  }
 }
 
 export class Appearance extends React.Component<
@@ -57,6 +70,7 @@ export class Appearance extends React.Component<
     this.state = {
       selectedTheme: usePropTheme ? props.selectedTheme : null,
       selectedTabSize: props.selectedTabSize,
+      titleBarStyle: props.titleBarStyle,
     }
 
     if (!usePropTheme) {
@@ -98,6 +112,12 @@ export class Appearance extends React.Component<
     this.props.onSelectedTabSizeChanged(parseInt(event.currentTarget.value))
   }
 
+  private onSelectChanged = (event: React.FormEvent<HTMLSelectElement>) => {
+    const titleBarStyle = event.currentTarget.value as TitleBarStyle
+    this.setState({ titleBarStyle })
+    this.props.onTitleBarStyleChanged(titleBarStyle)
+  }
+
   private onDateFormatChanged = (event: React.FormEvent<HTMLSelectElement>) => {
     const value = event.currentTarget.value
     const match = dateFormats.find(f => f.pattern === value)
@@ -134,6 +154,10 @@ export class Appearance extends React.Component<
   public renderThemeSwatch = (theme: ApplicationTheme) => {
     const darkThemeImage = encodePathAsUrl(__dirname, 'static/ghd_dark.svg')
     const lightThemeImage = encodePathAsUrl(__dirname, 'static/ghd_light.svg')
+    const draculaThemeImage = encodePathAsUrl(
+      __dirname,
+      'static/ghd_dracula.svg'
+    )
 
     switch (theme) {
       case ApplicationTheme.Light:
@@ -148,6 +172,13 @@ export class Appearance extends React.Component<
           <span>
             <img src={darkThemeImage} alt="" />
             <span className="theme-value-label">Dark</span>
+          </span>
+        )
+      case ApplicationTheme.Dracula:
+        return (
+          <span>
+            <img src={draculaThemeImage} alt="" />
+            <span className="theme-value-label">Dracula</span>
           </span>
         )
       case ApplicationTheme.System:
@@ -168,8 +199,31 @@ export class Appearance extends React.Component<
     }
   }
 
+  private renderTitleBarStyleDropdown() {
+    const { titleBarStyle } = this.state
+    const titleBarStyleDescription = getTitleBarStyleDescription(titleBarStyle)
+
+    return (
+      <div className="advanced-section">
+        <h2>Title bar style</h2>
+
+        <Select
+          value={this.state.titleBarStyle}
+          onChange={this.onSelectChanged}
+        >
+          <option value="native">Native</option>
+          <option value="custom">Custom</option>
+        </Select>
+
+        <div className="git-settings-description">
+          {titleBarStyleDescription}
+        </div>
+      </div>
+    )
+  }
+
   private renderSelectedTheme() {
-    const selectedTheme = this.state.selectedTheme
+    const { selectedTheme } = this.state
 
     if (selectedTheme == null) {
       return <Row>Loading system theme</Row>
@@ -178,21 +232,23 @@ export class Appearance extends React.Component<
     const themes = [
       ApplicationTheme.Light,
       ApplicationTheme.Dark,
+      ApplicationTheme.Dracula,
       ...(supportsSystemThemeChanges() ? [ApplicationTheme.System] : []),
     ]
 
     return (
       <div className="appearance-section">
         <h2 id="theme-heading">Theme</h2>
-
-        <RadioGroup<ApplicationTheme>
-          ariaLabelledBy="theme-heading"
-          className="theme-selector"
-          selectedKey={selectedTheme}
-          radioButtonKeys={themes}
-          onSelectionChanged={this.onSelectedThemeChanged}
-          renderRadioButtonLabelContents={this.renderThemeSwatch}
-        />
+        <Row>
+          <RadioGroup<ApplicationTheme>
+            ariaLabelledBy="theme-heading"
+            className="theme-selector"
+            selectedKey={selectedTheme}
+            radioButtonKeys={themes}
+            onSelectionChanged={this.onSelectedThemeChanged}
+            renderRadioButtonLabelContents={this.renderThemeSwatch}
+          />
+        </Row>
       </div>
     )
   }
@@ -289,6 +345,7 @@ export class Appearance extends React.Component<
         {this.renderSelectedTheme()}
         {this.renderFormatting()}
         {this.renderSelectedTabSize()}
+        {this.renderTitleBarStyleDropdown()}
       </DialogContent>
     )
   }
