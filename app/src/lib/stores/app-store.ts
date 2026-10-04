@@ -122,6 +122,7 @@ import {
   getPersistedThemeName,
   setPersistedTheme,
 } from '../../ui/lib/application-theme'
+import { TitleBarStyle } from '../../ui/lib/title-bar-style'
 import {
   getAppMenu,
   getCurrentWindowState,
@@ -133,6 +134,8 @@ import {
   sendWillQuitEvenIfUpdatingSync,
   quitApp,
   sendCancelQuittingSync,
+  saveTitleBarStyle,
+  getTitleBarStyle,
   showOpenDialog,
 } from '../../ui/main-process-proxy'
 import {
@@ -450,7 +453,7 @@ const RecentRepositoriesKey = 'recently-selected-repositories'
  *  maximum number of repositories shown in the "Recent" repositories group
  *  in the repository switcher dropdown
  */
-const RecentRepositoriesLength = 3
+const RecentRepositoriesLength = 7
 
 const defaultSidebarWidth: number = 250
 const sidebarWidthConfigKey: string = 'sidebar-width'
@@ -693,6 +696,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
   private selectedTheme = ApplicationTheme.System
   private currentTheme: ApplicableTheme = ApplicationTheme.Light
   private selectedTabSize = tabSizeDefault
+  private titleBarStyle: TitleBarStyle = 'native'
 
   private useWindowsOpenSSH: boolean = false
 
@@ -1322,6 +1326,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       selectedTheme: this.selectedTheme,
       currentTheme: this.currentTheme,
       selectedTabSize: this.selectedTabSize,
+      titleBarStyle: this.titleBarStyle,
       apiRepositories: this.apiRepositoriesStore.getState(),
       useWindowsOpenSSH: this.useWindowsOpenSSH,
       showCommitLengthWarning: this.showCommitLengthWarning,
@@ -2569,7 +2574,15 @@ export class AppStore extends TypedBaseStore<IAppState> {
     // Make sure the persisted theme is applied
     setPersistedTheme(this.selectedTheme)
 
-    this.currentTheme = await getCurrentlyAppliedTheme()
+    if (
+      this.selectedTheme === ApplicationTheme.Light ||
+      this.selectedTheme === ApplicationTheme.Dark ||
+      this.selectedTheme === ApplicationTheme.Dracula
+    ) {
+      this.currentTheme = this.selectedTheme
+    } else {
+      this.currentTheme = await getCurrentlyAppliedTheme()
+    }
 
     this.selectedTabSize = getNumber(tabSizeKey, tabSizeDefault)
 
@@ -2577,6 +2590,8 @@ export class AppStore extends TypedBaseStore<IAppState> {
       this.currentTheme = theme
       this.emitUpdate()
     })
+
+    this.titleBarStyle = await getTitleBarStyle()
 
     this.lastThankYou = getObject<ILastThankYou>(lastThankYouKey)
 
@@ -8749,12 +8764,21 @@ export class AppStore extends TypedBaseStore<IAppState> {
   /**
    * Set the application-wide theme
    */
-  public _setSelectedTheme(theme: ApplicationTheme) {
+  public async _setSelectedTheme(theme: ApplicationTheme) {
     setPersistedTheme(theme)
     this.selectedTheme = theme
-    this.emitUpdate()
 
-    return Promise.resolve()
+    if (
+      theme === ApplicationTheme.Light ||
+      theme === ApplicationTheme.Dark ||
+      theme === ApplicationTheme.Dracula
+    ) {
+      this.currentTheme = theme
+    } else {
+      this.currentTheme = await getCurrentlyAppliedTheme()
+    }
+
+    this.emitUpdate()
   }
 
   /**
@@ -8768,6 +8792,14 @@ export class AppStore extends TypedBaseStore<IAppState> {
     }
 
     return Promise.resolve()
+  }
+
+  /*
+   * Set the title bar style for the application
+   */
+  public _setTitleBarStyle(titleBarStyle: TitleBarStyle) {
+    this.titleBarStyle = titleBarStyle
+    return saveTitleBarStyle(titleBarStyle)
   }
 
   public async _resolveCurrentEditor() {
