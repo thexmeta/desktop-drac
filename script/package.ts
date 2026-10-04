@@ -1,8 +1,14 @@
 /* eslint-disable no-sync */
 
 import * as cp from 'child_process'
+import { createReadStream } from 'fs'
+import { writeFile } from 'fs/promises'
+import { pathExists, chmod } from 'fs-extra'
 import * as path from 'path'
 import * as electronInstaller from 'electron-winstaller'
+import * as crypto from 'crypto'
+
+import { readFileSync } from 'fs'
 import { getProductName, getCompanyName } from '../app/package-info'
 import {
   getDistPath,
@@ -26,6 +32,10 @@ import { rename } from 'fs/promises'
 import { join } from 'path'
 import { assertNonNullable } from '../app/src/lib/fatal-error'
 
+import { packageElectronBuilder } from './package-electron-builder'
+import { packageDebian } from './package-debian'
+import { packageRedhat } from './package-redhat'
+
 const distPath = getDistPath()
 const productName = getProductName()
 const outputDir = getDistRoot()
@@ -40,6 +50,8 @@ if (process.platform === 'darwin') {
   packageOSX()
 } else if (process.platform === 'win32') {
   packageWindows()
+} else if (process.platform === 'linux') {
+  packageLinux()
 } else {
   console.error(`I don't know how to package for ${process.platform} :(`)
   process.exit(1)
@@ -158,4 +170,107 @@ function packageWindows() {
       console.error(`Error packaging: ${e}`)
       process.exit(1)
     })
+}
+
+function getSha256Checksum(fullPath: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const algo = 'sha256'
+    const shasum = crypto.createHash(algo)
+
+    const s = createReadStream(fullPath)
+    s.on('data', function (d) {
+      shasum.update(d)
+    })
+    s.on('error', err => {
+      reject(err)
+    })
+    s.on('end', function () {
+      const d = shasum.digest('hex')
+      resolve(d)
+    })
+  })
+}
+
+async function generateChecksums(files: Array<string>) {
+  const distRoot = getDistRoot()
+
+  const checksums = new Map<string, string>()
+
+  for (const f of files) {
+    const checksum = await getSha256Checksum(f)
+    checksums.set(f, checksum)
+  }
+
+  let checksumsText = `Checksums: \n`
+
+  for (const [fullPath, checksum] of checksums) {
+    const fileName = path.basename(fullPath)
+    checksumsText += `${checksum} - ${fileName}\n`
+
+    const checksumFilePath = `${fullPath}.sha256`
+    await writeFile(checksumFilePath, checksum)
+  }
+
+  const checksumFile = path.join(distRoot, 'checksums.txt')
+
+  await writeFile(checksumFile, checksumsText)
+}
+
+function getLinuxDistroFamily(): 'debian' | 'redhat' | 'unknown' {
+  try {
+    const osRelease = readFileSync('/etc/os-release', 'utf8')
+    const idLike =
+      osRelease.match(/^ID_LIKE=(.*)$/m)?.[1]?.replace(/"/g, '') ?? ''
+    const id = osRelease.match(/^ID=(.*)$/m)?.[1]?.replace(/"/g, '') ?? ''
+
+    if (['debian', 'ubuntu'].includes(id) || idLike.includes('debian')) {
+      return 'debian'
+    }
+    if (
+      ['fedora', 'rhel', 'centos', 'opensuse', 'suse'].includes(id) ||
+      idLike.includes('rhel') ||
+      idLike.includes('fedora') ||
+      idLike.includes('suse')
+    ) {
+      return 'redhat'
+    }
+  } catch {}
+  return 'unknown'
+}
+
+async function packageLinux() {
+  const helperPath = path.join(getDistPath(), 'chrome-sandbox')
+  const exists = await pathExists(helperPath)
+
+  if (exists) {
+    console.log('Updating file mode for chrome-sandbox…')
+    await chmod(helperPath, 0o4755)
+  }
+  try {
+    const distroFamily = getLinuxDistroFamily()
+    console.log(`Detected Linux distro family: ${distroFamily}`)
+
+    const files = await packageElectronBuilder()
+    const installers = [...files]
+
+    if (distroFamily === 'debian' || distroFamily === 'unknown') {
+      const debianPackage = await packageDebian()
+      installers.push(debianPackage)
+    }
+
+    if (distroFamily === 'redhat' || distroFamily === 'unknown') {
+      const redhatPackage = await packageRedhat()
+      installers.push(redhatPackage)
+    }
+
+    console.log(`Installers created:`)
+    for (const installer of installers) {
+      console.log(` - ${installer}`)
+    }
+
+    generateChecksums(installers)
+  } catch (err) {
+    console.error('A problem occurred with the packaging step', err)
+    process.exit(1)
+  }
 }

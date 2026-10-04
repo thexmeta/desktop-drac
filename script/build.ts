@@ -2,9 +2,8 @@
 /// <reference path="./globals.d.ts" />
 
 import * as cp from 'child_process'
-import packager, { OfficialArch, Options } from '@electron/packager'
+import packager, { Options } from '@electron/packager'
 import frontMatter from 'front-matter'
-import * as os from 'os'
 import * as path from 'path'
 import { getPrintenvzPath } from 'printenvz'
 import { getProxyCommandPath } from 'process-proxy'
@@ -141,17 +140,19 @@ function packageApp() {
     )
   }
 
-  const toPackageArch = (targetArch: string | undefined): OfficialArch => {
-    if (targetArch === undefined) {
-      targetArch = os.arch()
+  const getPackageArch = (): 'arm64' | 'x64' | 'armv7l' => {
+    const arch = process.env.npm_config_arch || process.arch
+
+    if (arch === 'arm64' || arch === 'x64') {
+      return arch
     }
 
-    if (targetArch === 'arm64' || targetArch === 'x64') {
-      return targetArch
+    if (arch === 'arm') {
+      return 'armv7l'
     }
 
     throw new Error(
-      `Building Desktop for architecture '${targetArch}' is not supported`
+      `Building Desktop for architecture '${arch}' is not supported. Currently these architectures are supported: arm, arm64, x64`
     )
   }
 
@@ -171,25 +172,37 @@ function packageApp() {
   }
 
   const iconPath = getIconDirectory()
+
+  // Assets.car is only available on macOS builds
   const assetsCarPath = join(iconPath, 'Assets.car')
-  assert(
-    existsSync(assetsCarPath),
-    `Unable to find Assets.car at ${assetsCarPath}`
-  )
+  if (process.platform !== 'linux') {
+    assert(
+      existsSync(assetsCarPath),
+      `Unable to find Assets.car at ${assetsCarPath}`
+    )
+  }
+
+  // Linux doesn't use the icon setting from electron-packager. Packager probes
+  // for a sibling .icon file and requires macOS 26 to compile it. Use a distinct
+  // basename so older build hosts use the prebuilt ICNS.
+  const icon =
+    process.platform === 'linux'
+      ? undefined
+      : join(
+          iconPath,
+          process.platform === 'darwin' ? 'icon-logo-legacy.icns' : 'icon-logo'
+        )
+
+  const extraResource = process.platform === 'linux' ? [] : [assetsCarPath]
 
   return packager({
     name: getExecutableName(),
     platform: toPackagePlatform(process.platform),
-    arch: toPackageArch(process.env.TARGET_ARCH),
+    arch: getPackageArch(),
     asar: false, // TODO: Probably wanna enable this down the road.
     out: getDistRoot(),
-    // Packager probes for a sibling .icon file and requires macOS 26 to compile
-    // it. Use a distinct basename so older build hosts use the prebuilt ICNS.
-    icon: join(
-      iconPath,
-      process.platform === 'darwin' ? 'icon-logo-legacy.icns' : 'icon-logo'
-    ),
-    extraResource: [assetsCarPath],
+    icon,
+    extraResource,
     dir: outRoot,
     overwrite: true,
     tmpdir: false,

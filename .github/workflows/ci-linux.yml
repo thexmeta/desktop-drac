@@ -1,0 +1,282 @@
+name: 'CI / Linux'
+
+on:
+  push:
+    branches:
+      - development
+      - linux
+      - 'linux-release-*'
+      - 'stack/*'
+    tags:
+      - 'release-*.*.*-linux*'
+      - 'release-*.*.*-test*'
+  pull_request:
+    branches:
+      - linux
+      - linux-vnext
+      - 'linux-release-*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description:
+          'Release version (e.g. 3.5.5-linux1). Leave empty for dry run.'
+        required: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+env:
+  NODE_VERSION: 24.11.1
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: node vendor/yarn-1.21.1.js install --frozen-lockfile
+
+      - run: node vendor/yarn-1.21.1.js validate-electron-version
+      - run: node vendor/yarn-1.21.1.js lint
+      - run: node vendor/yarn-1.21.1.js validate-changelog
+
+      - name: Ensure a clean working directory
+        run: git diff --name-status --exit-code
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-dev
+
+      - name: Install dependencies
+        run: node vendor/yarn-1.21.1.js install --frozen-lockfile
+
+      - name: Run unit tests
+        run: node vendor/yarn-1.21.1.js test
+
+  amd64:
+    name: Ubuntu x64
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.version.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Determine linux version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.version }}" ]]; then
+            LINUX_VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/release-* ]]; then
+            LINUX_VERSION="${GITHUB_REF#refs/tags/release-}"
+          else
+            echo "No release version — using app/package.json as-is"
+            echo "patched=false" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Skip if this version was already released
+          RELEASE_TAG="release-${LINUX_VERSION}"
+          if git tag -l "$RELEASE_TAG" | grep -q "$RELEASE_TAG" && \
+             curl -sf -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               "https://api.github.com/repos/${{ github.repository }}/releases/tags/${RELEASE_TAG}" > /dev/null 2>&1; then
+            echo "::warning::Release ${RELEASE_TAG} already exists — skipping build"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "linux_version=$LINUX_VERSION" >> "$GITHUB_OUTPUT"
+          echo "patched=true" >> "$GITHUB_OUTPUT"
+          echo "Patching app/package.json version to $LINUX_VERSION"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('app/package.json', 'utf8'));
+            pkg.version = '$LINUX_VERSION';
+            fs.writeFileSync('app/package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+      - name: Install system dependencies
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-dev libxss-dev fakeroot dpkg
+
+      - name: Install dependencies
+        if: steps.version.outputs.skip != 'true'
+        run: node vendor/yarn-1.21.1.js install --frozen-lockfile
+
+      - name: Build production
+        if: steps.version.outputs.skip != 'true'
+        run: node vendor/yarn-1.21.1.js build:prod
+
+      - name: Package
+        if: steps.version.outputs.skip != 'true'
+        run: node vendor/yarn-1.21.1.js run package
+
+      - name: Upload output artifacts
+        if: steps.version.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-amd64-artifacts
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.sha256
+          retention-days: 5
+          if-no-files-found: error
+
+  publish:
+    name: Create GitHub release
+    needs: [amd64]
+    runs-on: ubuntu-latest
+    if: >-
+      needs.amd64.outputs.skip != 'true' && (startsWith(github.ref,
+      'refs/tags/') || (github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.version != ''))
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: './artifacts'
+
+      - name: Display structure of downloaded files
+        run: ls -R
+        working-directory: './artifacts'
+
+      - name: Determine release tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            RELEASE_TAG="release-${{ github.event.inputs.version }}"
+          else
+            RELEASE_TAG=${GITHUB_REF/refs\/tags\//}
+          fi
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
+          tagNameWithoutPrefix="${RELEASE_TAG:8}"
+          echo "RELEASE_TAG_WITHOUT_PREFIX=${tagNameWithoutPrefix}" >> $GITHUB_ENV
+
+      - name: Create and push tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ env.RELEASE_TAG }}"
+          git push origin "${{ env.RELEASE_TAG }}"
+
+      - name: Generate release notes
+        run: |
+          node -v
+          node vendor/yarn-1.21.1.js install --frozen-lockfile
+          node --import tsx script/generate-release-notes.ts "${{ github.workspace }}/artifacts" "${{ env.RELEASE_TAG_WITHOUT_PREFIX }}"
+          RELEASE_NOTES_FILE=script/release_notes.txt
+          if [[ ! -f "$RELEASE_NOTES_FILE" ]]; then
+              echo "$RELEASE_NOTES_FILE does not exist. Something might have gone wrong while generating the release notes."
+              exit 1
+          fi
+          echo "Release notes:"
+          echo "---"
+          cat ${RELEASE_NOTES_FILE}
+          echo "---"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: GitHub Desktop for Linux ${{ env.RELEASE_TAG_WITHOUT_PREFIX }}
+          body_path: script/release_notes.txt
+          files: |
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb
+            artifacts/**/*.sha256
+          draft: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  apt-repo:
+    name: Build APT repository
+    needs: [amd64]
+    runs-on: ubuntu-latest
+    if: >-
+      needs.amd64.outputs.skip != 'true' && (startsWith(github.ref,
+      'refs/tags/') || (github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.version != ''))
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ubuntu-amd64-artifacts
+          path: './debs'
+
+      - name: Install APT tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+
+      - name: Build APT repo
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: bash scripts/update-apt-repo.sh ./debs
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: repo/
+
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    needs: [apt-repo]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

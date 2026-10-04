@@ -1,10 +1,19 @@
+version: 2
 updates:
-  - directory: /
-    ignore:
-      - dependency-name: 'github/gh-aw-actions' # Managed by gh aw compile. Version-locked to the gh-aw compiler; do not bump.
-    # Disable version updates and keep only security updates
-    open-pull-requests-limit: 0
-    package-ecosystem: github-actions
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
       interval: weekly
-version: 2
+  - package-ecosystem: 'npm'
+    directory: '/'
+    open-pull-requests-limit: 5
+    schedule:
+      interval: 'weekly'
+    allow:
+      - dependency-name: 'electron-builder'
+      - dependency-name: 'electron-packager'
+      - dependency-name: 'electron-installer-*'
+      - dependency-name: 'xvfb-maybe'
+      - dependency-name: 'yaml'
+      - dependency-name: 'patch-package'
+      - dependency-name: 'postinstall-postinstall'
