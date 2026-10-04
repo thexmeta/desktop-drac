@@ -1,4 +1,8 @@
-import { spawn, ChildProcess } from 'child_process'
+import {
+  ChildProcess,
+  spawn as nodeSpawn,
+  SpawnOptionsWithoutStdio,
+} from 'child_process'
 import { assertNever } from '../fatal-error'
 import { parseEnumValue } from '../enum'
 import { pathExists } from '../path-exists'
@@ -9,6 +13,35 @@ import {
   parseCustomIntegrationArguments,
   spawnCustomIntegration,
 } from '../custom-integration'
+
+function isFlatpakBuild() {
+  return __LINUX__ && process.env.FLATPAK_HOST === '1'
+}
+
+/**
+ * Spawn a particular shell in a way that works for Flatpak-based usage.
+ *
+ * Recreated from the retired fork helper on the linux branch (T11): upstream
+ * has no native equivalent, so the fork's flatpak-spawn --host wrapper lives
+ * at its consumer's home.
+ *
+ * @param path path to shell, relative to the root of the filesystem
+ * @param args arguments to provide to the shell
+ * @param options additional options to provide to spawn function
+ *
+ * @returns a child process to observe and monitor
+ */
+function spawn(
+  path: string,
+  args: ReadonlyArray<string>,
+  options?: SpawnOptionsWithoutStdio
+): ChildProcess {
+  if (isFlatpakBuild()) {
+    return nodeSpawn('flatpak-spawn', ['--host', path, ...args], options)
+  }
+
+  return nodeSpawn(path, args, options)
+}
 
 export enum Shell {
   Gnome = 'GNOME Terminal',
@@ -28,6 +61,7 @@ export enum Shell {
   Kitty = 'Kitty',
   LXTerminal = 'LXDE Terminal',
   Warp = 'Warp',
+  BlackBox = 'Black Box',
   Ghostty = 'Ghostty',
 }
 
@@ -77,6 +111,8 @@ function getShellPath(shell: Shell): Promise<string | null> {
       return getPathIfAvailable('/usr/bin/lxterminal')
     case Shell.Warp:
       return getPathIfAvailable('/usr/bin/warp-terminal')
+    case Shell.BlackBox:
+      return getPathIfAvailable('/usr/bin/blackbox-terminal')
     case Shell.Ghostty:
       return getPathIfAvailable('/usr/bin/ghostty')
     default:
@@ -105,6 +141,7 @@ export async function getAvailableShells(): Promise<
     kittyPath,
     lxterminalPath,
     warpPath,
+    blackBoxPath,
     ghosttyPath,
   ] = await Promise.all([
     getShellPath(Shell.Gnome),
@@ -124,6 +161,7 @@ export async function getAvailableShells(): Promise<
     getShellPath(Shell.Kitty),
     getShellPath(Shell.LXTerminal),
     getShellPath(Shell.Warp),
+    getShellPath(Shell.BlackBox),
     getShellPath(Shell.Ghostty),
   ])
 
@@ -196,6 +234,10 @@ export async function getAvailableShells(): Promise<
     shells.push({ shell: Shell.Warp, path: warpPath })
   }
 
+  if (blackBoxPath) {
+    shells.push({ shell: Shell.BlackBox, path: blackBoxPath })
+  }
+
   if (ghosttyPath) {
     shells.push({ shell: Shell.Ghostty, path: ghosttyPath })
   }
@@ -216,6 +258,7 @@ export function launch(
     case Shell.Terminator:
     case Shell.XFCE:
     case Shell.Alacritty:
+    case Shell.BlackBox:
       return spawn(foundShell.path, ['--working-directory', path])
     case Shell.Ptyxis:
       return spawn(foundShell.path, [

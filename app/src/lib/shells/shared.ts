@@ -3,7 +3,7 @@ import { ChildProcess } from 'child_process'
 import * as Darwin from './darwin'
 import * as Win32 from './win32'
 import * as Linux from './linux'
-import { pathExists } from '../helpers/linux'
+import { pathExists } from '../path-exists'
 import { ShellError } from './error'
 import { ICustomIntegration } from '../custom-integration'
 

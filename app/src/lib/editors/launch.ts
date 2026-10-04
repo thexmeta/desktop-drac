@@ -7,6 +7,55 @@ import {
   parseCustomIntegrationArguments,
 } from '../custom-integration'
 
+// Flatpak-aware editor launch support, recreated from the retired fork
+// helper on the linux branch (T11). Upstream's native path-exists replaced
+// the helper's flatpak-aware pathExists; these fork-only spawn behaviors
+// have no upstream equivalent and live at their consumer's home.
+function isFlatpakBuild() {
+  return __LINUX__ && process.env.FLATPAK_HOST === '1'
+}
+
+/**
+ * Strip the flatpak app install prefix so the path can be resolved on the
+ * host via flatpak-spawn --host.
+ */
+export function formatPathForFlatpak(path: string): string {
+  if (path.startsWith('/var/lib/flatpak/app')) {
+    return path.replace('/var/lib/flatpak/app/', '')
+  }
+  return path
+}
+
+export function formatWorkingDirectoryForFlatpak(path: string): string {
+  return path.replace(/(\s)/, ' ')
+}
+
+/**
+ * Spawn a given editor in a way that works for Flatpak-based usage.
+ *
+ * @param path path to editor, relative to the root of the filesystem
+ * @param workingDirectory working directory to open initially in editor
+ * @param options additional options to provide to spawn function
+ */
+function spawnEditor(
+  path: string,
+  workingDirectory: string,
+  options: SpawnOptions
+) {
+  if (isFlatpakBuild()) {
+    const actualPath = formatPathForFlatpak(path)
+    const escapedWorkingDirectory =
+      formatWorkingDirectoryForFlatpak(workingDirectory)
+    return spawn(
+      'flatpak-spawn',
+      ['--host', actualPath, escapedWorkingDirectory],
+      options
+    )
+  } else {
+    return spawn(path, [workingDirectory], options)
+  }
+}
+
 async function launchEditor(
   editorPath: string,
   args: readonly string[],
@@ -33,6 +82,8 @@ async function launchEditor(
 
     const child = spawnAsDarwinApp
       ? spawn('open', ['-a', editorPath, ...args], opts)
+      : __LINUX__
+      ? spawnEditor(editorPath, args[0] ?? '', opts)
       : spawn(editorPath, args, opts)
 
     child.on('error', reject)
