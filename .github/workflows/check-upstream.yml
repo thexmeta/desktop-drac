@@ -22,7 +22,10 @@ jobs:
           remote: upstream
 
       - name: Fetch upstream tags
-        run: git remote rename origin desktop 2>/dev/null || true; git remote add desktop https://github.com/desktop/desktop.git 2>/dev/null || true; git fetch desktop --tags
+        run:
+          git remote rename origin desktop 2>/dev/null || true; git remote add
+          desktop https://github.com/desktop/desktop.git 2>/dev/null || true;
+          git fetch desktop --tags
 
       - name: Detect newest upstream release
         id: latest

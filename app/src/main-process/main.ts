@@ -185,10 +185,14 @@ let isDuplicateInstance = false
 function clearStaleSingleInstanceLock() {
   try {
     const lockPath = Path.join(app.getPath('userData'), 'SingletonLock')
+    // Sync fs is intentional on this path: the check runs at module load,
+    // before app ready, so it must complete before window creation.
+    // eslint-disable-next-line no-sync
     if (!Fs.existsSync(lockPath)) {
       return
     }
 
+    // eslint-disable-next-line no-sync
     const target = Fs.readlinkSync(lockPath)
     const pidMatch = /-(\d+)$/.exec(target)
     if (!pidMatch) {
@@ -208,6 +212,7 @@ function clearStaleSingleInstanceLock() {
 
     // Process is dead — the lock is stale. Remove it so we can acquire a fresh
     // lock instead of forwarding protocol URLs to a zombie.
+    // eslint-disable-next-line no-sync
     Fs.unlinkSync(lockPath)
     console.log(
       `Removed stale single-instance lock pointing at dead PID ${pid}`

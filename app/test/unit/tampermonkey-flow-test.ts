@@ -55,7 +55,8 @@ describe('Real-world Tampermonkey flow', () => {
   it('GitHub specific URL (with branch/path)', () => {
     // GitHub web generates URLs like:
     // x-github-client://openRepo/https://github.com/user/repo?branch=foo&filepath=src/index.ts&pr=123
-    const ghUrl = 'x-github-client://openRepo/https://github.com/user/repo?branch=main&filepath=README.md'
+    const ghUrl =
+      'x-github-client://openRepo/https://github.com/user/repo?branch=main&filepath=README.md'
     const action = parseAppURL(ghUrl)
 
     console.log('\n=== BRANCH/PATH TEST ===')
@@ -70,7 +71,7 @@ describe('Real-world Tampermonkey flow', () => {
     const cases = [
       '',
       'x-github-client://openRepo/',
-      'x-github-client://openRepo/',  // empty repo path
+      'x-github-client://openRepo/', // empty repo path
       'invalid-url',
       'x-github-client://unknownAction/foo',
     ]

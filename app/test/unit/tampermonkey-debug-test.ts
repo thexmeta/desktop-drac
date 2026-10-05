@@ -4,7 +4,8 @@ import { parseAppURL } from '../../src/lib/parse-app-url'
 
 describe('Tampermonkey script URL debugging', () => {
   it('parses Tampermonkey-generated URL format', () => {
-    const testUrl = 'x-github-client://openRepo/https://github.com/octocat/Hello-World'
+    const testUrl =
+      'x-github-client://openRepo/https://github.com/octocat/Hello-World'
     const result = parseAppURL(testUrl)
 
     console.log('\n=== Test Case ===')
@@ -18,7 +19,9 @@ describe('Tampermonkey script URL debugging', () => {
       console.log('Branch:', result.branch)
       console.log('PR:', result.pr)
       console.log('Filepath:', result.filepath)
-      console.log('\n✓ URL will be passed to CloneRepository popup as initialURL')
+      console.log(
+        '\n✓ URL will be passed to CloneRepository popup as initialURL'
+      )
       console.log('✓ User can clone by clicking "Clone" button')
     } else {
       console.log('\n✗ URL was rejected - app will only OPEN (no clone)')
@@ -29,7 +32,8 @@ describe('Tampermonkey script URL debugging', () => {
 
   it('tests what GitHub web actually generates', () => {
     // https://github.com/<user>/<repo> uses this exact format:
-    const githubUrl = 'x-github-client://openRepo/https://github.com/octocat/Hello-World'
+    const githubUrl =
+      'x-github-client://openRepo/https://github.com/octocat/Hello-World'
     const result = parseAppURL(githubUrl)
 
     console.log('\n=== GitHub Web Format ===')
