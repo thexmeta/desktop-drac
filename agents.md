@@ -234,6 +234,15 @@ Das Script: fetcht Tags von `desktop`, erkennt neueres `release-*`, legt `stack/
 | `package.json`, `app/package.json` | 3-Way-Merge; **niemals** `git checkout linux --` |
 | `yarn.lock`, `app/yarn.lock` | Regenerieren via `node vendor/yarn-1.21.1.js install`; nie hand-edit |
 
+**Konvention (CONV-2): Hunk-map conflict zones before every rebase/cherry-pick.** Bevor
+jeder Rebase oder Cherry-Pick läuft, eine Hunk-level-Map der erwarteten
+Konfliktzonen erstellen: die konkreten Files, Symbole oder Const-Blöcke, in denen
+sich upstream- und lokale Änderungen überschneiden. Selbst wenn git sauber
+auto-mergt, gelten die gemappten Zonen als Abnahmetest — jede Zone nach dem Merge
+mit einem gezielten grep/diff nachprüfen, das die vorgegebene Resolution-Shape
+bestätigt. Ein sauberer Merge ist **kein** Beleg, dass die Zonen korrekt gelöst
+wurden (Beleg T22: cherry-pick repo-pinning, app-store.ts const block).
+
 ### CI
 
 `ci-linux.yml` Trigger: `[development, linux, linux-release-*]`.
