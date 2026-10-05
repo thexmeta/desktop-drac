@@ -261,21 +261,26 @@ git push fork linux          # `fork` = thexmeta/desktop-drac; thexmeta-Creds: o
 
 ## Stack-Layout (Rebase-Stack-Ära)
 
-Basis: `release-3.6.6` (8b85519e7). Fork-Endstand: `linux` (52023946b). 11 Layer-Commits:
+Basis: `release-3.6.6` (8b85519e7). Fork-Endstand: `linux` (= Stack-Tip `stack/3.6.6`, Publish via T20 default-branch-Tanz). 15 Content-Commits = 12 Layer-Commits (T06–T16) + 2 CI-Wartungs-Commits (T19/T19c) + 1 User-Feature (T22 repo-pinning) — **+ this docs-correction commit (T23) = 16 total**:
 
-| Commit | Task | Inhalt |
-|---|---|---|
-| 1da6db63b | T06 | Infra: Workflows, Packaging, static, Manifeste; keytar+fs-admin Retargets |
-| bccce11b1 | T07 | main.ts: argv/Protocol-URL; `confirm-reveal-directory` erhalten |
-| 401cb41bb | T08 | App-Store + IPC-Vertrag |
-| 1679db1ee | T09 | Dracula-Theme + UI |
-| 0066658af | T09b | Protocol-URL-Tests |
-| 792f9f4a6 | T10 | Title-Bar-Feature |
-| b61dc24da | T11 | linux-support: helpers/linux.ts retired; Black Box + Flatpak erhalten |
-| 046bb3a44 | T12 | Workflow-Löschungen (8) |
-| 5455e2845 | T13 | Docs |
-| 95691aaa2 | T14 | Lockfile-Regen + S1-Union-Check (85/85 verbucht: 83 angewandt + 2 dokumentierte T11-Dispositionen) |
-| 213096eef | T15 | check-upstream-Rewrite + `scripts/rebase-upstream.sh` |
+| Commit | Task | Welle | Inhalt |
+|---|---|---|---|
+| 1da6db63b | T06 | 3 | Infra: Workflows, Packaging, static, Manifeste; keytar+fs-admin Retargets |
+| bccce11b1 | T07 | 3 | main.ts: argv/Protocol-URL; `confirm-reveal-directory` erhalten |
+| 401cb41bb | T08 | 3 | App-Store + IPC-Vertrag |
+| 1679db1ee | T09 | 3 | Dracula-Theme + UI |
+| 0066658af | T09b | 3 | Protocol-URL-Tests |
+| 792f9f4a6 | T10 | 3 | Title-Bar-Feature |
+| b61dc24da | T11 | 3 | linux-support: helpers/linux.ts retired; Black Box + Flatpak erhalten |
+| 046bb3a44 | T12 | 3 | Workflow-Löschungen (8) |
+| 5455e2845 | T13 | 3 | Docs |
+| 95691aaa2 | T14 | 3 | Lockfile-Regen + S1-Union-Check (85/85 verbucht: 83 angewandt + 2 dokumentierte T11-Dispositionen) |
+| 213096eef | T15 | 4 | check-upstream-Rewrite + `scripts/rebase-upstream.sh` |
+| 0d87e5278 | T16 | 4 | docs(agents): rebase-stack workflow + rollback runbook |
+| 1ec56e1d8 | T19 | 6 | CI-Wartung: NODE_VERSION-Bump 24.11.1 → 24.15.0 (ini@7.0.0 engines) |
+| 00272d964 | T19c | 6 | CI-Wartung: prettier-Format + no-sync lint debt |
+| a9f9760db | T22 | 7 | User-Feature: repo-pinning + updates grouping (Cherry-pick von `repo-pinning` 7efd503dc) |
+| *(dieser)* | T23 | 10 | docs-correction: Stack-Commit-Count-Tabelle (T21-Finding F1) |
 
 **Union-Check (T14)**: 85/85 upstream-Änderungen verbucht — 83 im Stack angewandt, 2 als dokumentierte T11-Dispositionen.
 
